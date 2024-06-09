@@ -1,0 +1,233 @@
+---
+title: "Untitled"
+author: "Enrico"
+date: "2023-12-04"
+output: pdf_document
+---
+
+
+```{r}
+library(dplyr)
+library(readxl)
+library(here)
+library(tidymodels)
+#library(vroom)
+```
+
+```{r}
+#data <- vroom(here("dataraw","drakordatabaru.csv"))
+data = read_xlsx("drakordata1.xlsx")
+View(data)
+```
+
+```{r}
+#berfungsi untuk mengecek kolom apakah ada yang mengandung NA (missing values) dan menggantikan dengan rata-rata kolom numerik dalam data jika ada
+for (i in 1:ncol(data)) {
+  if (is.numeric(data[, i])) {  # mengecek apakah kolum berisi numerik 
+    #jika data benar bersifat numerik dan terdapat missing values
+    data[is.na(data[, i]), i] <- mean(data[, i], na.rm = TRUE) 
+  }
+}
+```
+
+
+```{r}
+#membersihkan objek data dari baris-baris yang memiliki setidaknya satu nilai NA.
+data<- na.omit(data)
+```
+
+```{r}
+#melakukan transformasi pada beberapa kolom data yang jika pada awalnya berbentuk karakter akan diubah ke bentuk faktor yang menyimpan data kategori 
+data <- data %>% mutate(across(where(is.character), as.factor))
+str(data)
+```
+
+```{r}
+#secara garis besar membuat dua set data terpisah (trainData, testData) dari data awal dan menghilangkan kolom usia dan rating menonton drama korea pertama kali
+
+#membuat vector acak dengan nama data2 dan memiliki 2 nilai yaitu 1 atau 2, lalu nilai dalam data2 ditentukan oleh prob dengan nilai 1 memiliki prob 80% dan nilai 2 memiliki prob 20%
+data2 <- sample(2, nrow(data), replace = TRUE, prob = c(0.8,0.2))
+
+#deklarasi trainData yang berisi baris2 dari data yang dalam vektor data2 bernilai 1
+trainData<-data[data2==1,]
+
+#deklarasi testData yang berisi baris2 dari data yang dalam vektor data2 bernilai 2
+testData<-data[data2==2,]
+
+#menghapus kolom usia dan rating menonton drama korea pertama kali dari trainData dan testData
+trainData <- trainData[, !(names(trainData) %in% c("Usia", "Rating menonton drama korea pertama kali", "Jenis_Kelamin"))]
+testData <- testData[, !(names(testData) %in% c("Usia", "Rating menonton drama korea pertama kali"))]
+```
+
+```{r}
+View(trainData)
+```
+
+```{r}
+View(testData)
+```
+
+
+```{r}
+library(caret)
+library(e1071)
+
+# Menentukan atribut mana saja yang digunakan untuk melakukan pemodelan, keterangan ditaruh di awal karena digunakan sebagai label atau target sehingga harus disimpan terlebih dahulu
+predictor <- c("Keterangan", 
+               "Apakah menonton drama Korea meningkatkan rasa percaya diri anda",
+               "Mengimplementasikan pesan positif yang di dapat dari drakor di kehidupan sosial",
+               "Menjadi lebih aktif dalam obrolan di kehidupan sosial", 
+               "Apakah drama korea berpengaruh sebagai penghilang stress",
+               "Orang Tua mendukung menonton drama korea",
+               "Drama korea memberikan motivasi dalam hal positif",
+               "Drama korea mempengaruhi pandangan terhadap asmara lebih romantis",
+               "Lebih nyaman berbicara menggunakan bahasa sehari-hari daripada menggunakan istilah Korea.  ",
+               "Ingin mempelajari bahasa korea",
+               "Pola tidur tetap teratur walaupun menonton drakor",
+               "Bisa mengatur waktu dalam mengerjakan tugas atau pekerjaan dengan menonton drakor")
+
+# Define the target variable
+target <- trainData$Keterangan
+
+modelNB <- naiveBayes(Keterangan ~ ., data = trainData)
+modelNB
+
+
+```
+
+```{r}
+# membuat prediksi nilai keterangan untuk testData menggunakan modelNB yang disimpan ke testPredict
+testPredict <- predict(modelNB, newdata = testData)
+
+# membuat confusion matrix untuk mengevaluasi kinerja dari model, confusion matrix berfungsi untuk menghitung seberapa baik model dapat memprediksi kelas yang benar dan seberapa sering model melakukan kesalahan
+hasil <- confusionMatrix(testPredict, testData$Keterangan)
+hasil
+
+```
+
+```{r}
+# Assuming 'data' is your original dataset
+folds <- cut(seq(1, nrow(data)), breaks = 10, labels = FALSE)
+
+for (i in 1:10) {
+  testIndex <- which(folds == i, arr.ind = TRUE)
+  testData1 <- data[testIndex, ]
+  trainData1 <- data[-testIndex, ]
+}
+
+testData1 <- subset(testData1, select = -Usia)
+trainData1 <- subset(trainData1, select = -Usia)
+
+# Check dimensions
+dim(testData1)
+dim(trainData1)
+
+```
+
+```{r}
+#creatingmodel
+predictor <- c("Keterangan", "Rating menonton drama korea pertama kali", 
+               "Seberapa sering anda menonton drama Korea",
+               "Mengimplementasikan pesan positif yang di dapat dari drakor di kehidupan sosial",
+               "Menjadi lebih pendiam atau introvert", 
+               "Apakah drama korea berpengaruh sebagai penghilang stress",
+               "Membayangkan tokoh drama korea ada di kehidupan nyata sehingga memacu semangat",
+               "Suka membayangkan menjadi pemeran drama korea",
+               "Drama korea mempengaruhi pandangan terhadap asmara menjadi buruk",
+               "Tertarik terhadap produk Korea sehingga menjadi boros",
+               "Ingin mempelajari bahasa korea",
+               "Mengganggu jam tidur dengan menonton drakor",
+               "Melalaikan tugas atau pekerjaan karena drakor")
+
+modelNB2 <- naiveBayes(Keterangan ~ ., data = trainData1)
+modelNB2
+```
+
+```{r}
+#Predict on the training data
+# Assuming "trainData" is your dataset
+predicted_train <- predict(modelNB2, newdata = trainData1)
+
+hasil <- confusionMatrix(predicted_train, reference = trainData1$Keterangan)
+hasil
+
+
+```
+
+```{r}
+#predict on test data
+predicted_train <- predict(modelNB2, newdata = testData1)
+
+hasil <- confusionMatrix(predicted_train, reference = testData1$Keterangan)
+hasil
+```
+
+```{r}
+library(shiny)
+library(stringr)
+#mengatur tampilan web
+ui <- fluidPage(
+   titlePanel("Pengaruh Drama Korea Terhadap Perubahan Perilaku Remaja"), #membuat judul
+    # Show a plot of the generated distribution
+   mainPanel(#tab
+    #plot output : untuk scatterplot
+            tabsetPanel(type = "tabs",
+                        #tab list data yang akan diolah
+                        tabPanel("List Data", DT::dataTableOutput('tbl1')),
+                        #tab ggplot
+                        tabPanel("Pengaruh Drama Korea Berdasarkan Jenis Kelamin", plotOutput("scatterplot")),
+                        tabPanel("Confussion Matrix and Statistic", verbatimTextOutput("result")),
+                        #tab scatterplot/grafik
+                        tabPanel("Rating", plotOutput("scatterplot2")), 
+                        # tab wordcloud
+                        #tabPanel("Wordcloud", wordcloud2Output("Wordcloud2")),
+            )
+   )
+    
+)
+```
+
+```{r}
+data2<-data[,-c(1,3, 15)]
+
+server <- function(input, output) {
+  
+  
+  #data ditampilkan dalam beberapa halaman
+  output$tbl1 = DT::renderDataTable({
+      DT::datatable(data, options = list(lengthChange = FALSE))
+  })
+  
+  #barplot
+  output$scatterplot <- renderPlot({
+    data%>%filter(Keterangan == "Baik" | Keterangan == "Buruk")%>%
+      drop_na(Jenis_Kelamin)%>%
+      ggplot(aes(Keterangan, fill=Jenis_Kelamin))+
+      scale_fill_manual(values=c( "#56B4E9", "#FFC0CB"))+
+      geom_bar(position = "dodge", alpha= 0.5)+theme_bw()+
+      theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank())+
+      labs(title = "Pengaruh Drama Korea Berdasarkan Jenis Kelamin", x = "Pengaruh", y = "Jumlah")
+  }, height = 400)
+  
+  #output Data
+  output$result <-renderPrint({
+      hasil
+  })
+  
+  output$scatterplot2 <- renderPlot({
+    ggplot(data.frame(rating = colMeans(data2), jenisrating = names(data2))) +
+      geom_col(aes(jenisrating, rating, fill=jenisrating))+
+      labs(
+        x = "\nJenis Rating\n",
+        y = "Rating\n",
+        title = "Rating dari masing masing kolom",
+      ) +
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+  })
+  #wordcloud
+  #output$Wordcloud2 <- renderWordcloud2({
+    #p
+  #})
+}
+shinyApp(ui = ui, server = server)
+```
